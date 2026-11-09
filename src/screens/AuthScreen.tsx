@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ensureProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, UserCheck } from 'lucide-react';
 
 type Mode = 'login' | 'signup';
 
@@ -56,6 +56,22 @@ export default function AuthScreen() {
         .replace('Invalid login credentials', 'Email or password is incorrect.')
         .replace('User already registered', 'An account with this email already exists.');
       setError(friendly);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDemoSignIn = async (demoUsername: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      await supabase.auth.signInWithPassword({
+        email: `${demoUsername}@creator.studio`,
+        password: 'password123',
+      });
+      await refreshProfile();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not log in as demo creator');
     } finally {
       setBusy(false);
     }
@@ -155,6 +171,19 @@ export default function AuthScreen() {
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}
             {mode === 'login' ? 'Log in' : 'Create account'}
           </button>
+
+          {/* Quick Demo Login Option */}
+          <div className="pt-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => handleDemoSignIn('alexrivera')}
+              className="w-full bg-white/5 hover:bg-white/10 text-white/80 font-medium py-2.5 rounded-xl border border-white/10 transition text-xs flex items-center justify-center gap-1.5"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-pink-400" />
+              <span>Explore as Demo Creator (@alexrivera)</span>
+            </button>
+          </div>
         </form>
 
         <div className="text-center mt-5 text-sm text-white/50">

@@ -71,3 +71,21 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
+
+@keyframes floatReaction {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-120px) scale(1.2);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-240px) scale(0.9);
+    opacity: 0;
+  }
+}
+.animate-float-reaction {
+  animation: floatReaction 2.2s ease-out forwards;
+}

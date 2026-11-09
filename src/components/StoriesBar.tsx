@@ -4,14 +4,15 @@ import {
   createStory,
   deleteStory,
   fetchStoryGroups,
-  fetchStoryViewers,
+  fetchStoryViewersDetailed,
   markStoryViewed,
   uploadMedia,
 } from '@/lib/api';
-import type { Profile, StoryGroup } from '@/lib/types';
+import type { StoryGroup, StoryViewerUser } from '@/lib/types';
 import Avatar from './Avatar';
 import Modal from './Modal';
-import { Plus, X, Loader2, Eye, Trash2, Camera } from 'lucide-react';
+import { usePresence, formatRelativeActiveTime } from '@/hooks/usePresence';
+import { Plus, X, Loader2, Eye, Trash2, Camera, Sparkles, Check } from 'lucide-react';
 
 interface Props {
   onOpenProfile: (id: string) => void;
@@ -23,6 +24,7 @@ export default function StoriesBar({ onOpenProfile }: Props) {
   const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState<number | null>(null);
   const [composing, setComposing] = useState(false);
+  const { isUserOnline } = usePresence();
 
   const load = async () => {
     if (!profile) return;
@@ -49,7 +51,12 @@ export default function StoriesBar({ onOpenProfile }: Props) {
             aria-label="Add story"
           >
             <div className="relative">
-              <Avatar profile={profile} size="lg" />
+              <Avatar
+                profile={profile}
+                size="lg"
+                showStatus
+                isOnline={true}
+              />
               <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-pink-500 border-2 border-[#0a0a0f] flex items-center justify-center">
                 <Plus className="w-3 h-3 text-white" />
               </span>
@@ -69,6 +76,7 @@ export default function StoriesBar({ onOpenProfile }: Props) {
             .filter((g) => g.author.id !== profile?.id || g.stories.length > 1 || !myGroup)
             .map((g, i) => {
               const allViewed = g.stories.every((s) => g.viewedIds.includes(s.id));
+              const online = isUserOnline(g.author.id, g.author);
               return (
                 <button
                   key={g.author.id}
@@ -79,6 +87,8 @@ export default function StoriesBar({ onOpenProfile }: Props) {
                     profile={g.author}
                     size="lg"
                     ring={!allViewed}
+                    showStatus
+                    isOnline={online}
                   />
                   <span className="text-[11px] text-white/60 max-w-[64px] truncate">
                     @{g.author.username}
@@ -128,9 +138,10 @@ function StoryViewer({
   const { profile } = useAuth();
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(0);
-  const [viewers, setViewers] = useState<Profile[] | null>(null);
+  const [viewers, setViewers] = useState<StoryViewerUser[] | null>(null);
   const [showViewers, setShowViewers] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const { isUserOnline } = usePresence();
 
   const group = groups[gi];
   const story = group?.stories[si];
@@ -178,15 +189,15 @@ function StoryViewer({
   });
 
   const onViewers = async () => {
-    if (!story) return;
+    if (!story || !profile) return;
     setShowViewers(true);
-    const v = await fetchStoryViewers(story.id);
+    const v = await fetchStoryViewersDetailed(story.id, profile.id);
     setViewers(v);
   };
 
   if (!group || !story) return null;
   const isMine = group.author.id === profile?.id;
-  const progress = useMemo(() => si + 1, [si]);
+  const progress = si + 1;
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col animate-fade-in">
@@ -195,15 +206,21 @@ function StoryViewer({
           {group.stories.map((s, i) => (
             <div key={s.id} className="flex-1 h-0.5 bg-white/20 rounded-full overflow-hidden">
               <div
-                className={`h-full bg-white transition-all ${i < progress ? 'w-full' : i === progress - 1 ? 'w-full' : 'w-0'}`}
-                style={i === si ? { transition: `width ${story.media_type === 'image' ? 5000 : 8000}ms linear` } : {}}
+                className={`h-full bg-white transition-all ${
+                  i < progress ? 'w-full' : i === progress - 1 ? 'w-full' : 'w-0'
+                }`}
+                style={
+                  i === si
+                    ? { transition: `width ${story.media_type === 'image' ? 5000 : 8000}ms linear` }
+                    : {}
+                }
               />
             </div>
           ))}
         </div>
         <div className="flex items-center gap-2.5">
           <button onClick={() => onOpenProfile(group.author.id)}>
-            <Avatar profile={group.author} size="sm" />
+            <Avatar profile={group.author} size="sm" showStatus isOnline={isUserOnline(group.author.id, group.author)} />
           </button>
           <button
             onClick={() => onOpenProfile(group.author.id)}
@@ -218,10 +235,10 @@ function StoryViewer({
           {isMine && (
             <button
               onClick={onViewers}
-              className="text-xs text-white/70 hover:text-white flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-full"
+              className="text-xs text-white/80 hover:text-white flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10"
             >
               <Eye className="w-3.5 h-3.5" />
-              Views
+              <span>Views</span>
             </button>
           )}
           <button
@@ -289,7 +306,8 @@ function StoryViewer({
         </button>
       )}
 
-      <Modal open={showViewers} onClose={() => setShowViewers(false)} title="Story views">
+      {/* Story Viewers Ordered List Modal */}
+      <Modal open={showViewers} onClose={() => setShowViewers(false)} title="Story Viewers">
         {viewers === null ? (
           <div className="flex justify-center py-6">
             <Loader2 className="w-5 h-5 animate-spin text-white/40" />
@@ -297,23 +315,66 @@ function StoryViewer({
         ) : viewers.length === 0 ? (
           <p className="text-sm text-white/40 text-center py-6">No one has viewed this story yet.</p>
         ) : (
-          <ul className="space-y-1">
-            {viewers.map((p) => (
-              <li key={p.id}>
-                <button
-                  onClick={() => {
-                    setShowViewers(false);
-                    onClose();
-                    onOpenProfile(p.id);
-                  }}
-                  className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition text-left"
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto no-scrollbar">
+            <div className="text-[11px] text-white/40 uppercase tracking-wider px-2 pb-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-pink-400" />
+              <span>Ranked by Engagement & Follow Status</span>
+            </div>
+            {viewers.map((item, idx) => {
+              const online = isUserOnline(item.profile.id, item.profile);
+              const status = formatRelativeActiveTime(
+                item.profile.last_seen,
+                online,
+                item.profile.show_online_status,
+              );
+              return (
+                <div
+                  key={item.profile.id}
+                  className="flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition"
                 >
-                  <Avatar profile={p} size="sm" />
-                  <span className="text-sm font-medium">@{p.username}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <button
+                    onClick={() => {
+                      setShowViewers(false);
+                      onClose();
+                      onOpenProfile(item.profile.id);
+                    }}
+                    className="flex items-center gap-3 text-left flex-1 min-w-0"
+                  >
+                    <Avatar
+                      profile={item.profile}
+                      size="sm"
+                      showStatus
+                      isOnline={online}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold truncate">
+                          @{item.profile.username}
+                        </span>
+                        {idx === 0 && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded-full">
+                            Top
+                          </span>
+                        )}
+                        {item.is_following && (
+                          <span className="text-[10px] bg-white/10 text-white/70 px-1.5 py-0.2 rounded-full">
+                            Follows you
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-white/40 truncate flex items-center gap-1.5">
+                        {online ? (
+                          <span className="text-emerald-400 font-medium">Active now</span>
+                        ) : status.label ? (
+                          <span>{status.label}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Modal>
     </div>

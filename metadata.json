@@ -1,0 +1,5 @@
+{
+  "name": "Creators Social Network",
+  "description": "Creator social network app featuring real-time online presence tracking, post impressions and engagement analytics, native ad manager, paywalled content, audio spaces, and Gemini AI integration.",
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

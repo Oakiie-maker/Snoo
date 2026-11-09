@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { fetchDiscover, toggleFollow } from '@/lib/api';
 import type { DiscoverList } from '@/lib/api';
 import type { Profile } from '@/lib/types';
 import Avatar from '@/components/Avatar';
+import { usePresence, formatRelativeActiveTime } from '@/hooks/usePresence';
 import { UserPlus, Check, RefreshCw, Users2, Sparkles, Loader2 } from 'lucide-react';
 
 interface Props {
@@ -15,18 +16,19 @@ export default function DiscoverScreen({ onOpenProfile }: Props) {
   const [data, setData] = useState<DiscoverList | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { isUserOnline } = usePresence();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     const d = await fetchDiscover(profile.id);
     setData(d);
     setLoading(false);
-  };
+  }, [profile]);
 
   useEffect(() => {
     load();
-  }, [profile]);
+  }, [load]);
 
   const follow = async (other: Profile, follow: boolean) => {
     if (!profile || busyId) return;
@@ -80,17 +82,21 @@ export default function DiscoverScreen({ onOpenProfile }: Props) {
             </p>
           ) : (
             <div className="space-y-2">
-              {data.followBack.map((p) => (
-                <Row
-                  key={p.id}
-                  p={p}
-                  following={followedIds.has(p.id)}
-                  busy={busyId === p.id}
-                  onFollow={() => follow(p, !followedIds.has(p.id))}
-                  onOpen={() => onOpenProfile(p.id)}
-                  accent
-                />
-              ))}
+              {data.followBack.map((p) => {
+                const online = isUserOnline(p.id, p);
+                return (
+                  <Row
+                    key={p.id}
+                    p={p}
+                    isOnline={online}
+                    following={followedIds.has(p.id)}
+                    busy={busyId === p.id}
+                    onFollow={() => follow(p, !followedIds.has(p.id))}
+                    onOpen={() => onOpenProfile(p.id)}
+                    accent
+                  />
+                );
+              })}
             </div>
           )}
         </section>
@@ -108,22 +114,26 @@ export default function DiscoverScreen({ onOpenProfile }: Props) {
             </p>
           ) : (
             <div className="space-y-2">
-              {data.suggested.map((p) => (
-                <Row
-                  key={p.id}
-                  p={p}
-                  following={followedIds.has(p.id)}
-                  busy={busyId === p.id}
-                  onFollow={() => follow(p, !followedIds.has(p.id))}
-                  onOpen={() => onOpenProfile(p.id)}
-                />
-              ))}
+              {data.suggested.map((p) => {
+                const online = isUserOnline(p.id, p);
+                return (
+                  <Row
+                    key={p.id}
+                    p={p}
+                    isOnline={online}
+                    following={followedIds.has(p.id)}
+                    busy={busyId === p.id}
+                    onFollow={() => follow(p, !followedIds.has(p.id))}
+                    onOpen={() => onOpenProfile(p.id)}
+                  />
+                );
+              })}
             </div>
           )}
         </section>
 
         <div className="flex items-center justify-center gap-1.5 text-xs text-white/30 pt-2">
-          <Users2 className="w-3.3 h-3.5" />
+          <Users2 className="w-3.5 h-3.5" />
           Follow for follow — support your fellow creators.
         </div>
       </main>
@@ -133,6 +143,7 @@ export default function DiscoverScreen({ onOpenProfile }: Props) {
 
 function Row({
   p,
+  isOnline,
   following,
   busy,
   onFollow,
@@ -140,28 +151,40 @@ function Row({
   accent,
 }: {
   p: Profile;
+  isOnline: boolean;
   following: boolean;
   busy: boolean;
   onFollow: () => void;
   onOpen: () => void;
   accent?: boolean;
 }) {
+  const status = formatRelativeActiveTime(p.last_seen, isOnline, p.show_online_status);
+
   return (
-    <div className="flex items-center gap-3 bg-[#14141b] border border-white/5 rounded-2xl px-3 py-2.5">
-      <button onClick={onOpen}>
-        <Avatar profile={p} size="md" />
+    <div className="flex items-center gap-3 bg-[#14141b] border border-white/5 rounded-2xl px-3 py-2.5 hover:border-white/10 transition">
+      <button onClick={onOpen} className="relative">
+        <Avatar profile={p} size="md" showStatus isOnline={isOnline} />
       </button>
       <button onClick={onOpen} className="flex-1 min-w-0 text-left">
-        <div className="font-semibold text-sm truncate">@{p.username}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-sm truncate">@{p.username}</span>
+          {isOnline && (
+            <span className="text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded-full font-medium">
+              Active
+            </span>
+          )}
+        </div>
         {p.full_name && <div className="text-xs text-white/50 truncate">{p.full_name}</div>}
-        {p.bio && <div className="text-xs text-white/40 truncate mt-0.5">{p.bio}</div>}
+        <div className="text-[11px] text-white/40 truncate mt-0.5">
+          {p.bio || (status.label ? status.label : 'Creator')}
+        </div>
       </button>
       <button
         onClick={onFollow}
         disabled={busy}
-        className={`shrink-0 inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:opacity-60 ${
+        className={`shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full transition disabled:opacity-60 ${
           following
-            ? 'bg-white/5 text-white/70 hover:bg-white/10'
+            ? 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
             : accent
               ? 'bg-gradient-to-r from-pink-500 to-orange-400 text-white shadow-lg shadow-pink-500/20 hover:brightness-110'
               : 'bg-white/10 text-white hover:bg-white/20'
@@ -169,12 +192,12 @@ function Row({
       >
         {following ? (
           <>
-            <Check className="w-4 h-4" />
+            <Check className="w-3.5 h-3.5" />
             Following
           </>
         ) : (
           <>
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 h-3.5" />
             Follow
           </>
         )}

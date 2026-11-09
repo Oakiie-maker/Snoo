@@ -7,15 +7,17 @@ import DiscoverScreen from '@/screens/DiscoverScreen';
 import ChatScreen from '@/screens/ChatScreen';
 import ReelsScreen from '@/screens/ReelsScreen';
 import ProfileScreen from '@/screens/ProfileScreen';
+import AdManagerScreen from '@/screens/AdManagerScreen';
 import CreatePost from '@/components/CreatePost';
 import Avatar from '@/components/Avatar';
-import { Home, Compass, MessageCircle, Plus, Loader2, Clapperboard } from 'lucide-react';
+import { Home, Compass, MessageCircle, Plus, Loader2, Clapperboard, Megaphone } from 'lucide-react';
 
 type Tab = 'home' | 'reels' | 'discover' | 'chat' | 'profile';
 type Overlay =
   | { kind: 'none' }
   | { kind: 'compose' }
   | { kind: 'compose-reel' }
+  | { kind: 'ad-manager' }
   | { kind: 'profile'; id: string };
 
 export default function App() {
@@ -62,6 +64,8 @@ export default function App() {
         onMessage={openMessage}
       />
     );
+  } else if (overlay.kind === 'ad-manager') {
+    screen = <AdManagerScreen onBack={closeOverlay} />;
   } else {
     switch (tab) {
       case 'home':
@@ -69,6 +73,7 @@ export default function App() {
           <HomeScreen
             onOpenProfile={openProfile}
             onCompose={() => setOverlay({ kind: 'compose' })}
+            onOpenAdManager={() => setOverlay({ kind: 'ad-manager' })}
           />
         );
         break;
